@@ -1,0 +1,24 @@
+/* palette
+name: Verdigris
+order: 3
+dark: true
+bg: #16211f
+panel: #111a18
+input: #1c2a27
+button: #213430
+border: #2f4a44
+fg: #dfe9e4
+muted: #8fa9a1
+accent: #43b3a0
+accent_fg: #0b1513
+good: #6fd3a2
+warn: #d9a54a
+warn_bg: #33291a
+bad: #e07a63
+bad_bg: #35201b
+*/
+
+/* Copper edges on the panels the patina grew over. */
+#Sidebar { border-right: 1px solid #6b4a2f; }
+QGroupBox { border-color: #3d5a52; }
+QPushButton[primary="true"] { border-color: #2f8a7a; }

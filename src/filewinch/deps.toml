@@ -1,0 +1,384 @@
+# Every external tool FileWinch calls.
+#
+# required    true: a job cannot start without it. false: it switches on a feature.
+# binaries    names to look for with PATH lookup. The first one found is used.
+# feature     what the tool unlocks, shown on the Dependencies tab.
+# group       tools sharing a group satisfy each other (pkexec or sudo, any terminal).
+# version_cmd how to ask the tool its version. Output is searched with version_re.
+# min_version CVE-tied minimum. Older installs show amber, nothing is blocked,
+#             since distros like Fedora backport fixes into older version numbers.
+# packages    package name per package manager. An empty string means the
+#             distro does not package it; deps-check in CI skips those.
+# bundled     true: shipped inside the AppImage, looked up in $APPDIR first.
+#
+# Package names are best current knowledge. The CI deps-check job installs every
+# one of these on each distro's current image, which is what keeps them honest.
+
+[tools.lsblk]
+required = true
+feature = "Device listing"
+binaries = ["lsblk"]
+version_cmd = ["lsblk", "--version"]
+packages = { apt = "util-linux", dnf = "util-linux", zypper = "util-linux", pacman = "util-linux" }
+
+[tools.sfdisk]
+required = true
+feature = "Partition table backup"
+binaries = ["sfdisk"]
+version_cmd = ["sfdisk", "--version"]
+packages = { apt = "fdisk", dnf = "util-linux", zypper = "util-linux", pacman = "util-linux" }
+
+[tools.pkexec]
+required = true
+group = "privilege"
+feature = "Root access for raw device reads"
+binaries = ["pkexec"]
+version_cmd = ["pkexec", "--version"]
+packages = { apt = "pkexec", dnf = "polkit", zypper = "polkit", pacman = "polkit" }
+
+[tools.sudo]
+required = true
+group = "privilege"
+feature = "Root access fallback when pkexec is missing"
+binaries = ["sudo"]
+version_cmd = ["sudo", "--version"]
+packages = { apt = "sudo", dnf = "sudo", zypper = "sudo", pacman = "sudo" }
+
+[tools.smartctl]
+required = true
+feature = "Drive health check"
+binaries = ["smartctl"]
+version_cmd = ["smartctl", "--version"]
+packages = { apt = "smartmontools", dnf = "smartmontools", zypper = "smartmontools", pacman = "smartmontools" }
+
+[tools.ddrescue]
+required = true
+feature = "Imaging drives and discs"
+binaries = ["ddrescue"]
+version_cmd = ["ddrescue", "--version"]
+packages = { apt = "gddrescue", dnf = "ddrescue", zypper = "gnu_ddrescue", pacman = "ddrescue" }
+
+[tools.testdisk]
+required = true
+feature = "Partition table repair, undelete fallback"
+binaries = ["testdisk"]
+version_cmd = ["testdisk", "/version"]
+packages = { apt = "testdisk", dnf = "testdisk", zypper = "testdisk", pacman = "testdisk" }
+
+[tools.photorec]
+required = true
+feature = "Signature carving"
+binaries = ["photorec"]
+version_cmd = ["photorec", "/version"]
+packages = { apt = "testdisk", dnf = "testdisk", zypper = "testdisk", pacman = "testdisk" }
+
+[tools.fidentify]
+required = true
+feature = "Real file type identification"
+binaries = ["fidentify"]
+version_cmd = ["fidentify", "/version"]
+packages = { apt = "testdisk", dnf = "testdisk", zypper = "testdisk", pacman = "testdisk" }
+
+[tools.fls]
+required = true
+feature = "Named undelete (Sleuth Kit)"
+binaries = ["fls"]
+version_cmd = ["fls", "-V"]
+# Sleuth Kit CVE-2026-40024 to 40026. 4.15.0 is the first version I could
+# confirm carries the fixes (Arch's package). Check upstream when you bump this.
+min_version = "4.15.0"
+cve = "CVE-2026-40024, CVE-2026-40025, CVE-2026-40026"
+packages = { apt = "sleuthkit", dnf = "sleuthkit", zypper = "sleuthkit", pacman = "sleuthkit" }
+
+[tools.icat]
+required = true
+feature = "Named undelete (Sleuth Kit)"
+binaries = ["icat"]
+version_cmd = ["icat", "-V"]
+packages = { apt = "sleuthkit", dnf = "sleuthkit", zypper = "sleuthkit", pacman = "sleuthkit" }
+
+[tools.mmls]
+required = true
+feature = "Partition layout of images"
+binaries = ["mmls"]
+version_cmd = ["mmls", "-V"]
+packages = { apt = "sleuthkit", dnf = "sleuthkit", zypper = "sleuthkit", pacman = "sleuthkit" }
+
+[tools.fsstat]
+required = true
+feature = "Filesystem detection"
+binaries = ["fsstat"]
+version_cmd = ["fsstat", "-V"]
+packages = { apt = "sleuthkit", dnf = "sleuthkit", zypper = "sleuthkit", pacman = "sleuthkit" }
+
+[tools.file]
+required = true
+feature = "Type identification"
+binaries = ["file"]
+version_cmd = ["file", "--version"]
+packages = { apt = "file", dnf = "file", zypper = "file", pacman = "file" }
+
+[tools.ffmpeg]
+required = true
+feature = "Video and audio decode check, remux, re-encode"
+binaries = ["ffmpeg"]
+version_cmd = ["ffmpeg", "-version"]
+packages = { apt = "ffmpeg", dnf = "ffmpeg-free", zypper = "ffmpeg", pacman = "ffmpeg" }
+limited_note = "This ffmpeg leaves out patent-encumbered codecs. On Fedora enable RPM Fusion and run: sudo dnf swap ffmpeg-free ffmpeg --allowerasing. On openSUSE add the Packman repository and run: sudo zypper install --from packman ffmpeg"
+
+[tools.ffprobe]
+required = true
+feature = "Media probing"
+binaries = ["ffprobe"]
+version_cmd = ["ffprobe", "-version"]
+packages = { apt = "ffmpeg", dnf = "ffmpeg-free", zypper = "ffmpeg", pacman = "ffmpeg" }
+
+[tools.ntfsundelete]
+required = false
+feature = "NTFS undelete second opinion"
+binaries = ["ntfsundelete"]
+version_cmd = ["ntfsundelete", "--version"]
+packages = { apt = "ntfs-3g", dnf = "ntfsprogs", zypper = "ntfsprogs", pacman = "ntfs-3g" }
+
+[tools.btrfs]
+required = false
+feature = "Btrfs old-tree restore"
+binaries = ["btrfs"]
+version_cmd = ["btrfs", "--version"]
+packages = { apt = "btrfs-progs", dnf = "btrfs-progs", zypper = "btrfsprogs", pacman = "btrfs-progs" }
+
+[tools.cdparanoia]
+required = false
+feature = "Audio CD rescue"
+binaries = ["cdparanoia"]
+version_cmd = ["cdparanoia", "--version"]
+packages = { apt = "cdparanoia", dnf = "cdparanoia", zypper = "cdparanoia", pacman = "cdparanoia" }
+
+[tools.vcdxrip]
+required = false
+feature = "Video CD and SVCD rescue"
+binaries = ["vcdxrip"]
+version_cmd = ["vcdxrip", "--version"]
+packages = { apt = "vcdimager", dnf = "vcdimager", zypper = "vcdimager", pacman = "vcdimager" }
+
+[tools.mkvmerge]
+required = false
+feature = "MKV inspect and rebuild"
+binaries = ["mkvmerge"]
+version_cmd = ["mkvmerge", "--version"]
+version_re = 'v(\d+\.\d+(?:\.\d+)?)'
+# Heap overflow in the AVI parser, fixed in 102.0. FileWinch feeds it broken files on purpose.
+min_version = "102.0"
+cve = "CVE-2026-90783"
+packages = { apt = "mkvtoolnix", dnf = "mkvtoolnix", zypper = "mkvtoolnix", pacman = "mkvtoolnix-cli" }
+
+[tools.mkvinfo]
+required = false
+feature = "MKV inspect and rebuild"
+binaries = ["mkvinfo"]
+version_cmd = ["mkvinfo", "--version"]
+version_re = 'v(\d+\.\d+(?:\.\d+)?)'
+min_version = "102.0"
+cve = "CVE-2026-90783"
+packages = { apt = "mkvtoolnix", dnf = "mkvtoolnix", zypper = "mkvtoolnix", pacman = "mkvtoolnix-cli" }
+
+[tools.mkvextract]
+required = false
+feature = "MKV inspect and rebuild"
+binaries = ["mkvextract"]
+version_cmd = ["mkvextract", "--version"]
+version_re = 'v(\d+\.\d+(?:\.\d+)?)'
+min_version = "102.0"
+cve = "CVE-2026-90783"
+packages = { apt = "mkvtoolnix", dnf = "mkvtoolnix", zypper = "mkvtoolnix", pacman = "mkvtoolnix-cli" }
+
+[tools.untrunc]
+required = false
+bundled = true
+feature = "MP4/MOV with missing or broken moov"
+binaries = ["untrunc"]
+version_cmd = ["untrunc", "-V"]
+packages = { apt = "", dnf = "", zypper = "", pacman = "" }
+
+[tools.MP4Box]
+required = false
+feature = "MP4 index rebuild"
+binaries = ["MP4Box"]
+version_cmd = ["MP4Box", "-version"]
+packages = { apt = "gpac", dnf = "gpac", zypper = "gpac", pacman = "gpac" }
+
+[tools.tsanalyze]
+required = false
+feature = "MPEG-TS continuity analysis"
+binaries = ["tsanalyze"]
+version_cmd = ["tsanalyze", "--version"]
+# Not in the main repos. Install from github.com/tsduck/tsduck/releases (.deb or .rpm) or the AUR.
+packages = { apt = "", dnf = "", zypper = "", pacman = "" }
+upstream_note = "Download the .deb or .rpm from github.com/tsduck/tsduck/releases, or install tsduck from the AUR."
+
+[tools.mp3val]
+required = false
+feature = "MP3 frame repair"
+binaries = ["mp3val"]
+version_cmd = ["mp3val"]
+packages = { apt = "mp3val", dnf = "mp3val", zypper = "mp3val", pacman = "mp3val" }
+
+[tools.flac]
+required = false
+feature = "FLAC test and decode-through-errors"
+binaries = ["flac"]
+version_cmd = ["flac", "--version"]
+packages = { apt = "flac", dnf = "flac", zypper = "flac", pacman = "flac" }
+
+[tools.jpeginfo]
+required = false
+feature = "JPEG check"
+binaries = ["jpeginfo"]
+version_cmd = ["jpeginfo", "--version"]
+packages = { apt = "jpeginfo", dnf = "jpeginfo", zypper = "jpeginfo", pacman = "jpeginfo" }
+
+[tools.jpegtran]
+required = false
+feature = "JPEG rewrite"
+binaries = ["jpegtran"]
+version_cmd = ["jpegtran", "-version"]
+packages = { apt = "libjpeg-turbo-progs", dnf = "libjpeg-turbo-utils", zypper = "libjpeg-turbo", pacman = "libjpeg-turbo" }
+
+[tools.exiftool]
+required = false
+feature = "Embedded preview rescue, rename by capture date"
+binaries = ["exiftool"]
+version_cmd = ["exiftool", "-ver"]
+packages = { apt = "libimage-exiftool-perl", dnf = "perl-Image-ExifTool", zypper = "exiftool", pacman = "perl-image-exiftool" }
+
+[tools.pngcheck]
+required = false
+feature = "PNG check"
+binaries = ["pngcheck"]
+version_cmd = ["pngcheck", "-h"]
+packages = { apt = "pngcheck", dnf = "pngcheck", zypper = "pngcheck", pacman = "pngcheck" }
+
+[tools.pngfix]
+required = false
+feature = "PNG fix"
+binaries = ["pngfix"]
+version_cmd = ["pngfix", "--help"]
+packages = { apt = "libpng-tools", dnf = "libpng-tools", zypper = "libpng16-tools", pacman = "libpng" }
+
+[tools.magick]
+required = false
+feature = "Image decode fallback"
+binaries = ["magick", "convert"]
+version_cmd = ["magick", "-version"]
+packages = { apt = "imagemagick", dnf = "ImageMagick", zypper = "ImageMagick", pacman = "imagemagick" }
+
+[tools.zip]
+required = false
+feature = "ZIP and Office container repair"
+binaries = ["zip"]
+version_cmd = ["zip", "-v"]
+packages = { apt = "zip", dnf = "zip", zypper = "zip", pacman = "zip" }
+
+[tools.7z]
+required = false
+feature = "Archive test"
+binaries = ["7z", "7zz"]
+version_cmd = ["7z"]
+packages = { apt = "7zip", dnf = "7zip", zypper = "7zip", pacman = "7zip" }
+
+[tools.bsdtar]
+required = false
+feature = "Archive test fallback"
+binaries = ["bsdtar"]
+version_cmd = ["bsdtar", "--version"]
+packages = { apt = "libarchive-tools", dnf = "bsdtar", zypper = "bsdtar", pacman = "libarchive" }
+
+[tools.qpdf]
+required = false
+feature = "PDF check and rebuild"
+binaries = ["qpdf"]
+version_cmd = ["qpdf", "--version"]
+packages = { apt = "qpdf", dnf = "qpdf", zypper = "qpdf", pacman = "qpdf" }
+
+[tools.mutool]
+required = false
+feature = "PDF rebuild fallback"
+binaries = ["mutool"]
+version_cmd = ["mutool", "-v"]
+packages = { apt = "mupdf-tools", dnf = "mupdf", zypper = "mupdf", pacman = "mupdf-tools" }
+
+[tools.soffice]
+required = false
+feature = "Office files after container repair"
+binaries = ["soffice", "libreoffice"]
+version_cmd = ["soffice", "--version"]
+packages = { apt = "libreoffice", dnf = "libreoffice", zypper = "libreoffice", pacman = "libreoffice-fresh" }
+
+[tools.sqlite3]
+required = false
+feature = "SQLite recovery"
+binaries = ["sqlite3"]
+version_cmd = ["sqlite3", "--version"]
+packages = { apt = "sqlite3", dnf = "sqlite", zypper = "sqlite3", pacman = "sqlite" }
+
+[tools.mediainfo]
+required = false
+feature = "Media info for the report"
+binaries = ["mediainfo"]
+version_cmd = ["mediainfo", "--version"]
+packages = { apt = "mediainfo", dnf = "mediainfo", zypper = "mediainfo", pacman = "mediainfo" }
+
+# Terminals for TestDisk. Any one satisfies the group. Not required at
+# startup: only partition repair needs one, and that page checks for it.
+[tools.konsole]
+required = false
+group = "terminal"
+feature = "Terminal for TestDisk (partition repair only)"
+binaries = ["konsole"]
+version_cmd = ["konsole", "--version"]
+packages = { apt = "konsole", dnf = "konsole", zypper = "konsole", pacman = "konsole" }
+
+[tools.gnome-terminal]
+required = false
+group = "terminal"
+feature = "Terminal for TestDisk (partition repair only)"
+binaries = ["gnome-terminal"]
+version_cmd = ["gnome-terminal", "--version"]
+packages = { apt = "gnome-terminal", dnf = "gnome-terminal", zypper = "gnome-terminal", pacman = "gnome-terminal" }
+
+[tools.xfce4-terminal]
+required = false
+group = "terminal"
+feature = "Terminal for TestDisk (partition repair only)"
+binaries = ["xfce4-terminal"]
+version_cmd = ["xfce4-terminal", "--version"]
+packages = { apt = "xfce4-terminal", dnf = "xfce4-terminal", zypper = "xfce4-terminal", pacman = "xfce4-terminal" }
+
+[tools.kitty]
+required = false
+group = "terminal"
+feature = "Terminal for TestDisk (partition repair only)"
+binaries = ["kitty"]
+version_cmd = ["kitty", "--version"]
+packages = { apt = "kitty", dnf = "kitty", zypper = "kitty", pacman = "kitty" }
+
+[tools.alacritty]
+required = false
+group = "terminal"
+feature = "Terminal for TestDisk (partition repair only)"
+binaries = ["alacritty"]
+version_cmd = ["alacritty", "--version"]
+packages = { apt = "alacritty", dnf = "alacritty", zypper = "alacritty", pacman = "alacritty" }
+
+[tools.xterm]
+required = false
+group = "terminal"
+feature = "Terminal for TestDisk (partition repair only)"
+binaries = ["xterm"]
+version_cmd = ["xterm", "-version"]
+packages = { apt = "xterm", dnf = "xterm", zypper = "xterm", pacman = "xterm" }
+
+# Codecs the recipes need from ffmpeg. Missing ones mark ffmpeg as limited.
+[ffmpeg_codecs]
+decoders = ["h264", "hevc", "ac3", "mpeg2video", "mpeg4", "aac", "mp3"]
+encoders = ["ffv1", "libx264", "libx265"]

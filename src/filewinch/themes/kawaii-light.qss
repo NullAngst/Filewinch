@@ -1,0 +1,26 @@
+/* palette
+name: Kawaii Light
+order: 4
+dark: false
+bg: #fff6fa
+panel: #ffe9f2
+input: #ffffff
+button: #ffffff
+border: #f3bfd5
+fg: #4a2a3a
+muted: #a07088
+accent: #ff6fa8
+accent_fg: #ffffff
+good: #3fae7a
+warn: #c27a00
+warn_bg: #fff1d6
+bad: #d6336c
+bad_bg: #ffe0ea
+*/
+
+QPushButton { border-radius: 14px; }
+QPushButton[big="true"] { border-radius: 18px; }
+QLineEdit, QComboBox, QSpinBox, QDateEdit { border-radius: 10px; }
+QProgressBar { border-radius: 9px; }
+QProgressBar::chunk { border-radius: 8px; background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #ff9cc4, stop:1 #b48cff); }
+#DropZone { border-radius: 18px; }

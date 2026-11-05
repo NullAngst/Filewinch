@@ -1,0 +1,19 @@
+/* palette
+name: Light
+order: 1
+dark: false
+bg: #f6f6f4
+panel: #ebebe8
+input: #ffffff
+button: #ffffff
+border: #cfcfca
+fg: #1d1d1b
+muted: #6a6a64
+accent: #2f6fd0
+accent_fg: #ffffff
+good: #1f8a3b
+warn: #9a6200
+warn_bg: #fff4dc
+bad: #b3261e
+bad_bg: #fde9e7
+*/

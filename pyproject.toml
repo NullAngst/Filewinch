@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "filewinch"
+dynamic = ["version"]
+description = "Recover deleted files and repair damaged ones, by driving the tools that already do it"
+readme = "README.md"
+license = "GPL-3.0-or-later"
+requires-python = ">=3.11"
+dependencies = ["PyQt6"]
+classifiers = [
+    "Environment :: X11 Applications :: Qt",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Topic :: System :: Recovery Tools",
+]
+
+[project.gui-scripts]
+filewinch = "filewinch.__main__:main"
+
+[tool.setuptools.dynamic]
+version = { attr = "filewinch.__version__" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+filewinch = ["deps.toml", "filewinch.svg", "themes/*.qss"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
