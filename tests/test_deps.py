@@ -163,3 +163,15 @@ def test_scripts_never_rely_on_the_executable_bit():
     for line in conftest.splitlines():
         if "subprocess.run" in line and re.search(names, line):
             assert '"bash"' in line, f"conftest runs a script without bash: {line.strip()}"
+
+
+def test_extra_dirs_find_tools_outside_path(tmp_path, monkeypatch):
+    """Arch's exiftool lives in /usr/bin/vendor_perl, outside a non-login PATH."""
+    hidden = tmp_path / "vendor_perl"
+    hidden.mkdir()
+    _fake_bin(hidden, "exiftool", "13.40")
+    tools, _ = deps.load()
+    t = tools["exiftool"]
+    t.extra_dirs = [str(hidden)]
+    monkeypatch.setenv("PATH", _path_without({"exiftool"}, tmp_path))
+    assert deps._find_binary(t) == str(hidden / "exiftool")

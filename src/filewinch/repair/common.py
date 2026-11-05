@@ -51,6 +51,7 @@ class Verify:
     errors: int = 0
     duration: float = 0.0
     detail: str = ""
+    lost: bool = False   # the output is missing a stream the original had
 
 
 @dataclass
@@ -110,109 +111,150 @@ def duration_of(info: dict) -> float:
 
 LEVEL_RE = re.compile(r"^\[(?:[^\]]*\] )?\[(fatal|error|warning|info|panic)\]")
 PTS_RE = re.compile(r"pts_time:\s*(-?[\d.]+)")
-TIME_RE = re.compile(r"^out_time_us=(\d+)")
 
 
 def log_source(line: str) -> str:
     """Which component logged a line: "[h264 @ 0x...]" gives "h264".
 
-    FFmpeg 7.1 and later prefix demuxers and muxers with their stream, as in
-    "[in#0/matroska,webm @ 0x...]" and "[out#0/null @ 0x...]"; the prefix is
-    dropped so both forms read the same.
+    FFmpeg 7.1 and later prefix components with their file or stream, as in
+    "[in#0/matroska,webm @ 0x...]", "[vist#0:0/h264 @ 0x...]" and
+    "[out#0/null @ 0x...]"; the prefix is dropped so every version reads the same.
     """
     if not line.startswith("[") or " @" not in line:
         return ""
     tag = line[1:line.find(" @")]
-    return tag.split("/", 1)[1] if re.match(r"^(?:in|out)#\d+/", tag) else tag
+    m = re.match(r"^[a-z]+#\d+(?::\d+)?/(.*)$", tag)
+    tag = m.group(1) if m else tag
+    return re.sub(r"^(?:dec|enc):", "", tag)
 
 
-def _has_video(info: dict) -> bool:
-    return any(s.get("codec_type") == "video" for s in info.get("streams", []))
+# FFmpeg 8.0's Matroska demuxer mangles the final Opus packet of perfectly
+# healthy files, and both Opus decoders then report "Error parsing Opus packet
+# header". Audio decoder errors in the last second of the stream are ignored.
+# A second, because ffmpeg 8 buffers audio frames ahead of the filter that
+# timestamps them, so the error is logged up to about half a second early.
+# The cost: real damage in the final second of a soundtrack goes unreported.
+AUDIO_TAIL_GRACE = 1.0
+
+
+def _decode_pass(ctx: Ctx, path: Path, kind: str, extra_input: list[str], demuxers: set[str],
+                 others: set[str] | None = None) -> dict:
+    """Decode one kind of stream and place each error in time.
+
+    One decoder thread, and showinfo (video) or ashowinfo (audio) logging every
+    frame's timestamp in the same stream as the errors, so each error line
+    comes out right before the frame it belongs to. Audio gets its own pass:
+    newer ffmpeg decodes audio on another thread, so placing audio errors by
+    video frame times put them anywhere.
+
+    others: codec names of the streams this pass does not decode. ffmpeg 8
+    runs packet parsers (Opus, for one) for every stream inside the demuxer,
+    so their errors show up in every pass and belong to the other one.
+    """
+    others = others or set()
+    tool = ctx.tool("ffmpeg")
+    if kind == "video":
+        sel = ["-map", "0:v:0", "-filter:v:0", "showinfo"]
+        tag = "Parsed_showinfo"
+    else:
+        sel = ["-map", "0:a", "-filter:a", "ashowinfo"]
+        tag = "Parsed_ashowinfo"
+    argv = [tool, "-nostdin", "-hide_banner", "-loglevel", "level+info", "-threads", "1",
+            *extra_input, "-i", str(path), *sel, "-f", "null", "-"]
+    res = run_command(argv, cancel=ctx.cancel)
+    out = {"dec": [], "demux": [], "now": 0.0, "code": res.code}
+    first = None
+    pending = 0
+    for line in res.stderr.splitlines():
+        m = LEVEL_RE.match(line)
+        if not m:
+            continue
+        level = m.group(1)
+        if level == "info":
+            if tag in line and "pts_time:" in line:
+                pm = PTS_RE.search(line)
+                if pm:
+                    t = float(pm.group(1))
+                    if first is None:
+                        first = t
+                    t -= first
+                    if pending:
+                        out["dec"].extend([t] * pending)
+                        pending = 0
+                    out["now"] = max(out["now"], t)
+            continue
+        if level not in ("error", "fatal", "panic"):
+            continue
+        source = log_source(line)
+        # The null muxer complaining about output timestamps is not damage in
+        # the file being checked.
+        if source == "null":
+            continue
+        if source in others or (source.startswith("lib") and source[3:] in others):
+            continue
+        if source in demuxers:
+            out["demux"].append(out["now"])
+        else:
+            pending += 1
+    out["dec"].extend([out["now"]] * pending)
+    return out
 
 
 def decode_check(ctx: Ctx, path: Path, extra_input: list[str] | None = None) -> tuple[int, list[float], float]:
     """Decode every frame with ffmpeg and count errors.
 
     The universal check is ffmpeg -v error -i in -f null -, which decodes every
-    frame and logs each error. To place each error in time, video goes through
-    showinfo, which logs every frame's timestamp in the same stream as the
-    errors; audio-only files use ffmpeg's progress output instead.
+    frame and logs each error. Here it runs once for the first video stream and
+    once for the audio, so each error can be placed in time.
     Returns (error_count, error_times_seconds, decoded_seconds), times
     relative to the start of the file.
     """
-    tool = ctx.tool("ffmpeg")
-    if not tool:
+    if not ctx.tool("ffmpeg"):
         return -1, [], 0.0
     info = ffprobe_json(ctx, path)
-    video = _has_video(info)
-    if video:
-        # One decoder thread, so each error line comes out right before the
-        # frame it belongs to instead of wherever a worker thread got to.
-        argv = [tool, "-nostdin", "-hide_banner", "-loglevel", "level+info", "-threads", "1",
-                *(extra_input or []), "-i", str(path), "-map", "0:v:0", "-map", "0:a?",
-                "-filter:v:0", "showinfo", "-f", "null", "-"]
-    else:
-        argv = [tool, "-nostdin", "-hide_banner", "-v", "error", *(extra_input or []), "-i", str(path),
-                "-map", "0:a?", "-f", "null", "-progress", "pipe:2", "-stats_period", "0.05", "-"]
-    res = run_command(argv, cancel=ctx.cancel)
+    streams = info.get("streams", [])
+    kinds = {s.get("codec_type") for s in streams}
+    names = {k: {s.get("codec_name") for s in streams if s.get("codec_type") == k} - {None}
+             for k in ("video", "audio")}
+    fmt = info.get("format", {}).get("format_name") or ""
     # The demuxer reads ahead of the decoder, so its errors are logged early.
     # Decoder errors place the damage; demuxer errors only when there are none.
-    demuxers = set((info.get("format", {}).get("format_name") or "").split(",")) | {
-        info.get("format", {}).get("format_name") or ""}
-    first = None
-    now = 0.0
+    demuxers = set(fmt.split(",")) | {fmt}
+    extra = list(extra_input or [])
     errors = 0
-    pending = 0
-    dec_times: list[float] = []
-    demux_times: list[float] = []
     times: list[float] = []
-    for line in res.stderr.splitlines():
-        if video:
-            m = LEVEL_RE.match(line)
-            if not m:
-                continue
-            level = m.group(1)
-            if level == "info":
-                if "Parsed_showinfo" in line and "pts_time:" in line:
-                    pm = PTS_RE.search(line)
-                    if pm:
-                        t = float(pm.group(1))
-                        if first is None:
-                            first = t
-                        t -= first
-                        if pending:
-                            dec_times.extend([t] * pending)
-                            pending = 0
-                        now = max(now, t)
-                continue
-            if level not in ("error", "fatal", "panic"):
-                continue
-            source = log_source(line)
-            # The null muxer complaining about output timestamps is not damage
-            # in the file being checked.
-            if source == "null":
-                continue
+    demux_times: list[float] = []
+    decoded = 0.0
+    passes = 0
+    if "video" in kinds:
+        v = _decode_pass(ctx, path, "video", extra, demuxers, names["audio"])
+        passes += 1
+        errors += len(v["dec"]) + len(v["demux"])
+        times += v["dec"]
+        demux_times += v["demux"]
+        decoded = v["now"]
+        if v["code"] != 0 and not v["dec"] and not v["demux"]:
             errors += 1
-            if source in demuxers:
-                demux_times.append(now)
-            else:
-                pending += 1
-        else:
-            m = TIME_RE.match(line)
-            if m:
-                now = int(m.group(1)) / 1_000_000
-                continue
-            if re.match(r"^[a-z0-9_]+=", line):
-                continue  # other progress keys
-            if line.strip() and log_source(line) != "null":
-                errors += 1
-                times.append(now)
-    if video:
-        dec_times.extend([now] * pending)
-        times = dec_times or demux_times
-    if res.code != 0 and errors == 0:
-        errors = 1
-    return errors, times, now
+    if "audio" in kinds:
+        a = _decode_pass(ctx, path, "audio", extra, demuxers, names["video"])
+        passes += 1
+        real = [t for t in a["dec"] if t < a["now"] - AUDIO_TAIL_GRACE]
+        ignored = len(a["dec"]) - len(real)
+        errors += len(real)
+        times += real
+        if "video" not in kinds:
+            # Demuxer errors were already counted by the video pass when there is one.
+            errors += len(a["demux"])
+            demux_times += a["demux"]
+            decoded = a["now"]
+        if a["code"] != 0 and not real and not a["demux"] and not ignored:
+            errors += 1
+    if not passes:
+        res = run_command([ctx.tool("ffmpeg"), "-nostdin", "-v", "error", *extra, "-i", str(path),
+                           "-f", "null", "-"], cancel=ctx.cancel)
+        lines = [l for l in res.stderr.splitlines() if l.strip() and log_source(l) != "null"]
+        errors = len(lines) or (1 if res.code != 0 else 0)
+    return errors, sorted(times) or sorted(demux_times), decoded
 
 
 def keyframes(ctx: Ctx, path: Path) -> list[float]:
@@ -364,7 +406,7 @@ def media_verify(ctx: Ctx, out: Path) -> Verify:
     detail = f"{errors} decode errors, {hms(dur)} long"
     if lost:
         detail += ", lost the " + " and ".join(sorted(lost)) + " stream"
-    return Verify(ok, errors, dur, detail)
+    return Verify(ok, errors, dur, detail, lost=bool(lost))
 
 
 def ffmpeg_base(ctx: Ctx) -> list[str]:

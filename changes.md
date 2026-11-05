@@ -1,5 +1,41 @@
 # Changes
 
+## 2026.11.05 - Bug fixes
+
+- Decode check runs video and audio as separate passes, each timing its own
+frames (showinfo and ashowinfo), so audio damage is placed correctly on
+ffmpeg 8, which decodes audio on its own thread.
+- Each pass ignores errors from the other kind of stream. ffmpeg 8 runs the
+Opus packet parser for every stream, so Opus errors showed up in the video
+pass too.
+- Audio decoder errors in the final second of a stream are ignored. ffmpeg
+8.0.1 reports "Error parsing Opus packet header" on the last packet of
+healthy Opus-in-Matroska files, which made every such file look damaged and
+cost the GOP cut an extra second. Real damage in the last second of a
+soundtrack now goes unreported.
+- ffmpeg log tags like "[vist#0:0/h264 @" and "[dec:h264 @" read the same as
+"[h264 @".
+- When nothing verifies, a result missing a stream the original had now ranks
+below every result that kept them all.
+- deps.toml: exiftool is also looked for in /usr/bin/vendor_perl, where Arch
+installs it outside a non-login PATH. New extra_dirs field for cases like it.
+- make-fixtures.sh and ci-test.sh add /usr/bin/vendor_perl to PATH when it
+exists.
+- MKV fixture: a keyframe every 0.5 s instead of 1 s, so zeros straddling a
+keyframe still leave 95% of the duration. FILEWINCH_FIXTURE_NO_X264=1 builds
+the Fedora/openSUSE MPEG-4 variant on any machine.
+- install-deps.sh --test on openSUSE adds the GLib, FreeType, fontconfig and
+libpng libraries Qt loads (libgthread-2_0-0 was missing).
+- ci-test.sh smoke lists every library the bundled Qt cannot find, all at
+once, before starting the app.
+
+
+Reasons for changes: The third CI run failed the MKV test on Ubuntu 26.04
+(ffmpeg 8.0.1) and Fedora (MPEG-4 fixture), could not find exiftool on Arch,
+and could not start Qt on openSUSE. Reproduced in an Ubuntu 26.04 chroot with
+its own ffmpeg 8.0.1: the full suite now passes there with both fixture
+variants, and on ffmpeg 6.1 and current ffmpeg master locally.
+
 ## 2026.11.05 - Bug fixes and package names
 
 - Decode check: newer ffmpeg (7.1 and later) tags log lines as

@@ -26,6 +26,11 @@ for cmd in timeout find; do
 done
 
 repo=$(cd -- "$(dirname -- "$0")/.." && pwd)
+# Arch installs Perl tools like exiftool in /usr/bin/vendor_perl, which only
+# login shells put on PATH.
+if [ -d /usr/bin/vendor_perl ]; then
+    PATH="$PATH:/usr/bin/vendor_perl"
+fi
 appimage=$(cd -- "$(dirname -- "$appimage")" && pwd)/$(basename -- "$appimage")
 chmod +x "$appimage"
 work=$(mktemp -d "${TMPDIR:-/tmp}/filewinch-ci.XXXXXX")
@@ -36,6 +41,20 @@ export QT_QPA_PLATFORM=offscreen
 
 case $mode in
     smoke)
+        # First list every host library the bundled Qt cannot find, all at once,
+        # so a distro missing several shows them in one run.
+        if command -v ldd >/dev/null 2>&1; then
+            (cd -- "$work" && "$appimage" --appimage-extract >/dev/null)
+            missing_libs=$(find "$work/squashfs-root/opt" -path '*PyQt6/Qt6/*' \( -name 'libQt6Core.so*' \
+                -o -name 'libQt6Gui.so*' -o -name 'libQt6Widgets.so*' -o -name 'libQt6DBus.so*' \
+                -o -name 'libqoffscreen.so' \) -type f -exec ldd {} + 2>/dev/null \
+                | awk '/not found/ { print $1 }' | sort -u)
+            rm -rf -- "$work/squashfs-root"
+            if [ -n "$missing_libs" ]; then
+                printf 'The bundled Qt needs these libraries, missing on this system:\n%s\n' "$missing_libs" >&2
+                exit 1
+            fi
+        fi
         # The window has no quit button headless; it either crashes quickly or runs
         # until timeout kills it, and running is a pass.
         set +e

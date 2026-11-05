@@ -123,7 +123,8 @@ if [ "$extras" -eq 1 ]; then
                         mesa-libGL mesa-libEGL fontconfig libxkbcommon dbus-libs glib2) ;;
         # The openSUSE image's busybox awk is enough for make-fixtures.sh.
         zypper) packages+=(mtools dosfstools e2fsprogs ShellCheck python3-pytest
-                           Mesa-libGL1 Mesa-libEGL1 fontconfig libxkbcommon0 libdbus-1-3 glib2-tools) ;;
+                           Mesa-libGL1 Mesa-libEGL1 fontconfig libfontconfig1 libfreetype6 libpng16-16
+                           libxkbcommon0 libdbus-1-3 libglib-2_0-0 libgthread-2_0-0) ;;
         pacman) packages+=(mtools dosfstools e2fsprogs gawk shellcheck python-pytest
                            mesa fontconfig libxkbcommon dbus glib2) ;;
     esac

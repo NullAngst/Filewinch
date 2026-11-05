@@ -15,6 +15,12 @@ if [ -z "$out" ]; then
     exit 2
 fi
 
+# Arch installs Perl tools like exiftool in /usr/bin/vendor_perl, which only
+# login shells put on PATH.
+if [ -d /usr/bin/vendor_perl ]; then
+    PATH="$PATH:/usr/bin/vendor_perl"
+fi
+
 need=(ffmpeg ffprobe python3 mkfs.fat mcopy mdel mmd mke2fs debugfs dd truncate sha256sum exiftool zip sqlite3 awk)
 missing=()
 for cmd in "${need[@]}"; do
@@ -41,6 +47,10 @@ case $encoders in
     *" libx264 "*) have_x264=1 ;;
     *) have_x264=0 ;;
 esac
+# FILEWINCH_FIXTURE_NO_X264=1 builds the Fedora/openSUSE variant anywhere.
+if [ "${FILEWINCH_FIXTURE_NO_X264:-0}" = "1" ]; then
+    have_x264=0
+fi
 case $encoders in
     *" libopus "*) have_opus=1 ;;
     *) have_opus=0 ;;
@@ -76,9 +86,11 @@ moov_pos=$(awk '/type:.moov. parent:.root./ { for (i = 1; i <= NF; i++) if ($i =
 cp -- src/ref.mp4 repair/reference.mp4
 head -c "$moov_pos" src/take2.mp4 >repair/no_moov.mp4
 
-# MKV with 64 KiB of zeros in the middle.
+# MKV with 64 KiB of zeros in the middle. A keyframe every 0.5 s, so even
+# zeros that straddle a keyframe cost at most two short GOPs (1 s of 30),
+# inside the 95% the acceptance test asks for.
 ff -f lavfi -i testsrc=size=640x360:rate=30:duration=30 -f lavfi -i sine=duration=30 \
-   -vf noise=alls=25:allf=t+u "${h264[@]}" -g 30 -b:v 8M "${opus[@]}" repair/zeroed.mkv
+   -vf noise=alls=25:allf=t+u "${h264[@]}" -g 15 -b:v 8M "${opus[@]}" repair/zeroed.mkv
 size=$(filesize repair/zeroed.mkv)
 stomp repair/zeroed.mkv $((size / 2)) 65536 /dev/zero
 

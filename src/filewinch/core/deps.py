@@ -51,6 +51,7 @@ class Tool:
     bundled: bool = False
     limited_note: str = ""
     upstream_note: str = ""
+    extra_dirs: list[str] = field(default_factory=list)
     # Filled by scan()
     path: str = ""
     version: str = ""
@@ -77,6 +78,7 @@ def load(deps_file: Path = DEPS_FILE) -> tuple[dict[str, Tool], dict]:
             bundled=bool(raw.get("bundled", False)),
             limited_note=raw.get("limited_note", ""),
             upstream_note=raw.get("upstream_note", ""),
+            extra_dirs=list(raw.get("extra_dirs", [])),
         )
     return tools, data.get("ffmpeg_codecs", {})
 
@@ -118,8 +120,11 @@ def _find_binary(tool: Tool) -> str:
                 cand = base / name
                 if cand.is_file() and os.access(cand, os.X_OK):
                     return str(cand)
+    search = host_env().get("PATH", "")
+    if tool.extra_dirs:
+        search = ":".join([search, *tool.extra_dirs])
     for name in tool.binaries:
-        found = shutil.which(name, path=host_env().get("PATH"))
+        found = shutil.which(name, path=search)
         if found:
             return found
     return ""

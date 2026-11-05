@@ -80,8 +80,10 @@ def _missing_tools(ctx: Ctx, recipe: Recipe) -> list[str]:
 
 
 def _score(a: Attempt) -> tuple:
+    """Best attempt when none verifies: keeps every stream, then fewest errors,
+    then longest. A clean file with the video gone is not a repair."""
     v = a.verify
-    return (v.errors if v.errors >= 0 else 10**9, -v.duration)
+    return (v.lost, v.errors if v.errors >= 0 else 10**9, -v.duration)
 
 
 def repair(src: Path, out_dir: Path, tools, *, lossy_codec: str = "h265", reference: Path | None = None,

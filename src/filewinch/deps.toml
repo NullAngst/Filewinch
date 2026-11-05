@@ -10,6 +10,9 @@
 # packages    package name per package manager. An empty string means the
 #             distro does not package it; deps-check in CI skips those.
 # bundled     true: shipped inside the AppImage, looked up in $APPDIR first.
+# extra_dirs  folders to look in after PATH, for distros that install a tool
+#             outside it (Arch puts exiftool in /usr/bin/vendor_perl, which
+#             only login shells add to PATH).
 #
 # Package names are best current knowledge. The CI deps-check job installs every
 # one of these on each distro's current image, which is what keeps them honest.
@@ -252,6 +255,7 @@ packages = { apt = "libjpeg-turbo-progs", dnf = "libjpeg-turbo-utils", zypper = 
 required = false
 feature = "Embedded preview rescue, rename by capture date"
 binaries = ["exiftool"]
+extra_dirs = ["/usr/bin/vendor_perl"]
 version_cmd = ["exiftool", "-ver"]
 packages = { apt = "libimage-exiftool-perl", dnf = "perl-Image-ExifTool", zypper = "exiftool", pacman = "perl-image-exiftool" }
 
