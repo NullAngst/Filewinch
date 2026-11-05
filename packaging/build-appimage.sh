@@ -5,8 +5,8 @@
 # The AppImage holds Python, PyQt6, FileWinch and untrunc. Nothing else, since
 # every other tool comes from the host.
 #
-# Needs: bash, curl, git, make, g++, pkg-config, file, python3 (to read the
-# GitHub API reply), and libavformat/libavcodec/libavutil development files
+# Needs: bash, curl, git, make, g++, pkg-config, file, rsvg-convert (librsvg2-bin
+# or librsvg), python3 (to read the GitHub API reply), and libavformat/libavcodec/libavutil development files
 # for the default untrunc build.
 #
 # Environment:
@@ -24,7 +24,7 @@ script_dir=$(cd -- "$(dirname -- "$0")" && pwd)
 repo=$(cd -- "$script_dir/.." && pwd)
 out=${1:-"$repo/dist"}
 
-need=(curl git make g++ pkg-config file python3 sed)
+need=(curl git make g++ pkg-config file python3 sed rsvg-convert)
 missing=()
 for cmd in "${need[@]}"; do
     command -v "$cmd" >/dev/null 2>&1 || missing+=("$cmd")
@@ -114,7 +114,20 @@ printf 'Bundled Python: %s\n' "$python_rel"
 "$python_bin" -s -m pip install --no-warn-script-location --upgrade pip
 "$python_bin" -s -m pip install --no-warn-script-location PyQt6 "$repo"
 
-# 3. untrunc into the AppDir, with its libav libraries via linuxdeploy.
+# 3. Clear out python-appimage's own desktop entry, icon and AppRun, so
+# nothing below picks them up.
+find "$appdir" -maxdepth 1 \( -name '*.desktop' -o -name '*.png' -o -name '*.svg' -o -name '.DirIcon' \) \
+    -exec rm -f -- {} +
+for d in applications icons metainfo; do
+    if [ -d "$appdir/usr/share/$d" ]; then
+        find "$appdir/usr/share/$d" -name 'python*' -exec rm -f -- {} +
+    fi
+done
+rm -f -- "$appdir/AppRun"
+
+# 4. untrunc into the AppDir. linuxdeploy only bundles its libav libraries;
+# the desktop entry and icon are placed by hand below, since linuxdeploy would
+# want a usr/bin/filewinch binary and would pick the SVG for .DirIcon.
 mkdir -p -- "$appdir/usr/bin" "$appdir/usr/share/filewinch"
 cp -- "$work/untrunc/bin/untrunc" "$appdir/usr/bin/untrunc"
 cp -- "$work/untrunc/untrunc-build.txt" "$appdir/usr/share/filewinch/untrunc-build.txt"
@@ -124,14 +137,17 @@ fetch "https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/l
 chmod +x "$work/linuxdeploy.AppImage"
 run_appimage "$work/linuxdeploy.AppImage" --appdir "$appdir" --executable "$appdir/usr/bin/untrunc"
 
-# Desktop entry, icon and AppRun replace python-appimage's own.
-rm -f -- "$appdir"/*.desktop "$appdir"/*.png "$appdir"/*.svg "$appdir/.DirIcon" "$appdir/AppRun"
-mkdir -p -- "$appdir/usr/share/applications" "$appdir/usr/share/icons/hicolor/scalable/apps"
-cp -- "$script_dir/filewinch.desktop" "$appdir/filewinch.desktop"
+# Desktop entry and icon. appimagetool wants a PNG .DirIcon, so the SVG is
+# rendered to PNG; the SVG stays in hicolor/scalable for desktops that use it.
+icons="$appdir/usr/share/icons/hicolor"
+mkdir -p -- "$appdir/usr/share/applications" "$icons/scalable/apps" "$icons/256x256/apps"
 cp -- "$script_dir/filewinch.desktop" "$appdir/usr/share/applications/filewinch.desktop"
-cp -- "$script_dir/filewinch.svg" "$appdir/filewinch.svg"
-cp -- "$script_dir/filewinch.svg" "$appdir/usr/share/icons/hicolor/scalable/apps/filewinch.svg"
-ln -s filewinch.svg "$appdir/.DirIcon"
+cp -- "$script_dir/filewinch.desktop" "$appdir/filewinch.desktop"
+cp -- "$script_dir/filewinch.svg" "$icons/scalable/apps/filewinch.svg"
+rsvg-convert -w 256 -h 256 -o "$icons/256x256/apps/filewinch.png" "$script_dir/filewinch.svg"
+cp -- "$icons/256x256/apps/filewinch.png" "$appdir/filewinch.png"
+ln -s filewinch.png "$appdir/.DirIcon"
+
 cat >"$appdir/AppRun" <<EOF
 #!/usr/bin/env bash
 # FileWinch AppImage entry point. GUI only; arguments are ignored.
@@ -150,7 +166,12 @@ chmod +x "$appdir/AppRun"
 mkdir -p -- "$appdir/usr/share/licenses/filewinch"
 cp -- "$repo/LICENSE" "$appdir/usr/share/licenses/filewinch/LICENSE"
 
-# 4. Pack.
+# mktemp makes the work folder 0700 and some of python-appimage's folders come
+# out the same way. Everyone who runs the AppImage needs to read it.
+chmod -R a+rX "$appdir"
+chmod a+rx "$appdir/AppRun"
+
+# 5. Pack.
 fetch "https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage" \
     "$work/appimagetool.AppImage"
 chmod +x "$work/appimagetool.AppImage"

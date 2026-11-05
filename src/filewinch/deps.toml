@@ -205,7 +205,9 @@ required = false
 feature = "MP4 index rebuild"
 binaries = ["MP4Box"]
 version_cmd = ["MP4Box", "-version"]
-packages = { apt = "gpac", dnf = "gpac", zypper = "gpac", pacman = "gpac" }
+# Ubuntu 26.04 and Debian no longer ship gpac. GPAC publishes its own .deb.
+packages = { apt = "", dnf = "gpac", zypper = "gpac", pacman = "gpac" }
+upstream_note = "Not in the Debian or Ubuntu archive. Download the .deb from gpac.io/downloads."
 
 [tools.tsanalyze]
 required = false

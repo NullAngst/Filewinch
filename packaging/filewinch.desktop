@@ -6,6 +6,6 @@ Comment=Recover deleted files and repair damaged videos, photos and documents
 Exec=filewinch
 Icon=filewinch
 Terminal=false
-Categories=Utility;System;Filesystem;
+Categories=System;Filesystem;
 Keywords=undelete;recover;recovery;repair;photorec;testdisk;ddrescue;video;
 StartupWMClass=filewinch

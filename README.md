@@ -74,7 +74,7 @@ Be clear on these before you rely on it:
 2. Install the optional tools for the formats and features you want. Each one switches on a feature; without it that feature is greyed out with the reason, and everything else still works. Everything at once, on apt:
 
    ```
-   sudo apt install ntfs-3g btrfs-progs cdparanoia vcdimager mkvtoolnix gpac mp3val flac jpeginfo libjpeg-turbo-progs libimage-exiftool-perl pngcheck libpng-tools imagemagick zip 7zip libarchive-tools qpdf mupdf-tools libreoffice sqlite3 mediainfo
+   sudo apt install ntfs-3g btrfs-progs cdparanoia vcdimager mkvtoolnix mp3val flac jpeginfo libjpeg-turbo-progs libimage-exiftool-perl pngcheck libpng-tools imagemagick zip 7zip libarchive-tools qpdf mupdf-tools libreoffice sqlite3 mediainfo
    ```
 
    On Fedora, openSUSE or Arch, start FileWinch and use Copy Install Command on the Dependencies tab, since that builds the command for your package manager.
