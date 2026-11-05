@@ -58,10 +58,12 @@ jobs:
         run: |
           if command -v apt-get >/dev/null; then apt-get update && apt-get install -y git tar gzip python3; fi
           if command -v dnf >/dev/null; then dnf install -y git tar gzip python3; fi
-          if command -v zypper >/dev/null; then zypper --non-interactive install git tar gzip python3; fi
+          if command -v zypper >/dev/null; then zypper --non-interactive install git tar gzip python3 || [ $? -eq 106 ]; fi
           if command -v pacman >/dev/null; then pacman -Syu --noconfirm git tar gzip python; fi
       - uses: actions/checkout@v4
       - name: Install every package in deps.toml
+        env:
+          FILEWINCH_CI: "1"
         run: bash tests/install-deps.sh
 
   test:
@@ -80,7 +82,7 @@ jobs:
         run: |
           if command -v apt-get >/dev/null; then apt-get update && apt-get install -y git tar gzip python3; fi
           if command -v dnf >/dev/null; then dnf install -y git tar gzip python3; fi
-          if command -v zypper >/dev/null; then zypper --non-interactive install git tar gzip python3; fi
+          if command -v zypper >/dev/null; then zypper --non-interactive install git tar gzip python3 || [ $? -eq 106 ]; fi
           if command -v pacman >/dev/null; then pacman -Syu --noconfirm git tar gzip python; fi
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
@@ -88,6 +90,8 @@ jobs:
           name: appimage-default
           path: dist
       - name: Install host tools
+        env:
+          FILEWINCH_CI: "1"
         run: bash tests/install-deps.sh --test
       - name: Run the AppImage headless once
         run: bash tests/ci-test.sh smoke dist/FileWinch-x86_64.AppImage
@@ -168,7 +172,7 @@ jobs:
         run: |
           if command -v apt-get >/dev/null; then apt-get update && apt-get install -y git tar gzip python3; fi
           if command -v dnf >/dev/null; then dnf install -y git tar gzip python3; fi
-          if command -v zypper >/dev/null; then zypper --non-interactive install git tar gzip python3; fi
+          if command -v zypper >/dev/null; then zypper --non-interactive install git tar gzip python3 || [ $? -eq 106 ]; fi
           if command -v pacman >/dev/null; then pacman -Syu --noconfirm git tar gzip python; fi
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
@@ -176,6 +180,8 @@ jobs:
           name: appimage-fallback
           path: dist
       - name: Install host tools
+        env:
+          FILEWINCH_CI: "1"
         run: bash tests/install-deps.sh --test
       - name: Run the AppImage headless once
         run: bash tests/ci-test.sh smoke dist/FileWinch-x86_64.AppImage
