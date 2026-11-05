@@ -19,6 +19,9 @@ on:
 permissions:
   contents: read
 
+# Scripts are always started with "bash script.sh", never ./script.sh: files
+# uploaded through GitHub's web UI lose their executable bit.
+
 env:
   FIXTURES: ${{ github.workspace }}/fixtures
 
@@ -37,7 +40,7 @@ jobs:
       - name: Build the AppImage
         env:
           GITHUB_TOKEN: ${{ github.token }}
-        run: packaging/build-appimage.sh dist
+        run: bash packaging/build-appimage.sh dist
       - uses: actions/upload-artifact@v4
         with:
           name: appimage-default
@@ -59,7 +62,7 @@ jobs:
           if command -v pacman >/dev/null; then pacman -Syu --noconfirm git tar gzip python; fi
       - uses: actions/checkout@v4
       - name: Install every package in deps.toml
-        run: tests/install-deps.sh
+        run: bash tests/install-deps.sh
 
   test:
     needs: build
@@ -85,12 +88,12 @@ jobs:
           name: appimage-default
           path: dist
       - name: Install host tools
-        run: tests/install-deps.sh --test
+        run: bash tests/install-deps.sh --test
       - name: Run the AppImage headless once
-        run: tests/ci-test.sh smoke dist/FileWinch-x86_64.AppImage
+        run: bash tests/ci-test.sh smoke dist/FileWinch-x86_64.AppImage
       - name: Acceptance tests
         id: tests
-        run: tests/ci-test.sh full dist/FileWinch-x86_64.AppImage
+        run: bash tests/ci-test.sh full dist/FileWinch-x86_64.AppImage
       - name: Record the truncated-MP4 result
         if: always()
         run: |
@@ -146,7 +149,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
           FF_VER: "3.3.9"
-        run: packaging/build-appimage.sh dist
+        run: bash packaging/build-appimage.sh dist
       - uses: actions/upload-artifact@v4
         with:
           name: appimage-fallback
@@ -173,11 +176,11 @@ jobs:
           name: appimage-fallback
           path: dist
       - name: Install host tools
-        run: tests/install-deps.sh --test
+        run: bash tests/install-deps.sh --test
       - name: Run the AppImage headless once
-        run: tests/ci-test.sh smoke dist/FileWinch-x86_64.AppImage
+        run: bash tests/ci-test.sh smoke dist/FileWinch-x86_64.AppImage
       - name: Acceptance tests
-        run: tests/ci-test.sh full dist/FileWinch-x86_64.AppImage
+        run: bash tests/ci-test.sh full dist/FileWinch-x86_64.AppImage
 
   release:
     needs: [deps-check, test, decide-untrunc, test-fallback]
