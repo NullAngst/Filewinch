@@ -1,107 +1,227 @@
-name: Build AppImage
+# Build FileWinch-x86_64.AppImage, test it on five distros against their own
+# current packages, attest it, and publish it on v* tags.
+#
+# Every container tag here moves on its own (oldstable, stable, latest,
+# tumbleweed), so nothing needs a manual bump. Actions are referenced by major
+# version, which moves within that major; maintenance.md covers the bumps.
 
-# Builds Keelhaul-x86_64.AppImage and attaches it to the GitHub release
-# whenever a tag is pushed. Run it by hand from the Actions tab to get the
-# AppImage as a workflow artifact without making a release.
+name: build
 
 on:
   push:
-    tags: ["*"]
+    tags: ["v*"]
   workflow_dispatch:
+  schedule:
+    # Monthly: build and test, never publish. Catches renamed packages and
+    # tools whose output changed before a user does.
+    - cron: "17 6 3 * *"
 
 permissions:
-  contents: write
+  contents: read
+
+# Scripts are always started with "bash script.sh", never ./script.sh: files
+# uploaded through GitHub's web UI lose their executable bit.
+
+env:
+  FIXTURES: ${{ github.workspace }}/fixtures
 
 jobs:
-  appimage:
+  build:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    container: debian:oldstable
     steps:
-      - uses: actions/checkout@v5
-
-      - uses: actions/setup-python@v6
-        with:
-          python-version: "3.x"
-
       - name: Install build tools
         run: |
-          sudo apt-get update
-          sudo apt-get install -y libfuse2t64 || sudo apt-get install -y libfuse2
-          python -m pip install --upgrade pip python-appimage
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            ca-certificates curl git make g++ pkg-config file python3 \
+            libavformat-dev libavcodec-dev libavutil-dev
+      - uses: actions/checkout@v4
+      - name: Build the AppImage
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: bash packaging/build-appimage.sh dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: appimage-default
+          path: dist/
 
-      # No pinned Python: use the newest base image python-appimage publishes.
-      - name: Pick the newest Python base image
-        id: py
+  deps-check:
+    strategy:
+      fail-fast: false
+      matrix:
+        image: ["debian:stable", "ubuntu:latest", "fedora:latest", "opensuse/tumbleweed", "archlinux:latest"]
+    runs-on: ubuntu-latest
+    container: ${{ matrix.image }}
+    steps:
+      - name: Tools checkout needs
+        run: |
+          if command -v apt-get >/dev/null; then apt-get update && apt-get install -y git tar gzip python3; fi
+          if command -v dnf >/dev/null; then dnf install -y git tar gzip python3; fi
+          if command -v zypper >/dev/null; then zypper --non-interactive install git tar gzip python3; fi
+          if command -v pacman >/dev/null; then pacman -Syu --noconfirm git tar gzip python; fi
+      - uses: actions/checkout@v4
+      - name: Install every package in deps.toml
+        run: bash tests/install-deps.sh
+
+  test:
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        image: ["debian:stable", "ubuntu:latest", "fedora:latest", "opensuse/tumbleweed", "archlinux:latest"]
+    runs-on: ubuntu-latest
+    container: ${{ matrix.image }}
+    outputs:
+      # One output per distro would need a fixed list; the marker artifacts below carry it instead.
+      ran: "yes"
+    steps:
+      - name: Tools checkout needs
+        run: |
+          if command -v apt-get >/dev/null; then apt-get update && apt-get install -y git tar gzip python3; fi
+          if command -v dnf >/dev/null; then dnf install -y git tar gzip python3; fi
+          if command -v zypper >/dev/null; then zypper --non-interactive install git tar gzip python3; fi
+          if command -v pacman >/dev/null; then pacman -Syu --noconfirm git tar gzip python; fi
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: appimage-default
+          path: dist
+      - name: Install host tools
+        run: bash tests/install-deps.sh --test
+      - name: Run the AppImage headless once
+        run: bash tests/ci-test.sh smoke dist/FileWinch-x86_64.AppImage
+      - name: Acceptance tests
+        id: tests
+        run: bash tests/ci-test.sh full dist/FileWinch-x86_64.AppImage
+      - name: Record the truncated-MP4 result
+        if: always()
+        run: |
+          name=$(printf '%s' "${{ matrix.image }}" | tr '/:' '__')
+          mkdir -p mp4-result
+          if [ -f mp4-result.txt ]; then cp mp4-result.txt "mp4-result/$name.txt"; else printf 'error\n' >"mp4-result/$name.txt"; fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mp4-result-${{ strategy.job-index }}
+          path: mp4-result/
+
+  # untrunc: build against current libav by default. Only when the
+  # truncated-MP4 test fails on every distro, rebuild against untrunc's own
+  # pinned static ffmpeg and test again.
+  decide-untrunc:
+    needs: test
+    if: always() && needs.test.result != 'skipped'
+    runs-on: ubuntu-latest
+    outputs:
+      fallback: ${{ steps.decide.outputs.fallback }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: mp4-result-*
+          path: results
+          merge-multiple: true
+      - id: decide
+        run: |
+          total=$(find results -name '*.txt' | wc -l)
+          failed=$(grep -l '^fail' results/*.txt 2>/dev/null | wc -l)
+          printf 'MP4 test failed on %s of %s distros\n' "$failed" "$total"
+          if [ "$total" -gt 0 ] && [ "$failed" -eq "$total" ]; then
+            printf 'fallback=true\n' >>"$GITHUB_OUTPUT"
+          else
+            printf 'fallback=false\n' >>"$GITHUB_OUTPUT"
+          fi
+
+  build-fallback:
+    needs: decide-untrunc
+    if: needs.decide-untrunc.outputs.fallback == 'true'
+    runs-on: ubuntu-latest
+    container: debian:oldstable
+    steps:
+      - name: Install build tools
+        run: |
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            ca-certificates curl wget git make g++ pkg-config file python3 nasm yasm \
+            libavformat-dev libavcodec-dev libavutil-dev
+      - uses: actions/checkout@v4
+      - name: Build the AppImage with untrunc's static ffmpeg
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          FF_VER: "3.3.9"
+        run: bash packaging/build-appimage.sh dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: appimage-fallback
+          path: dist/
+
+  test-fallback:
+    needs: build-fallback
+    strategy:
+      fail-fast: false
+      matrix:
+        image: ["debian:stable", "ubuntu:latest", "fedora:latest", "opensuse/tumbleweed", "archlinux:latest"]
+    runs-on: ubuntu-latest
+    container: ${{ matrix.image }}
+    steps:
+      - name: Tools checkout needs
+        run: |
+          if command -v apt-get >/dev/null; then apt-get update && apt-get install -y git tar gzip python3; fi
+          if command -v dnf >/dev/null; then dnf install -y git tar gzip python3; fi
+          if command -v zypper >/dev/null; then zypper --non-interactive install git tar gzip python3; fi
+          if command -v pacman >/dev/null; then pacman -Syu --noconfirm git tar gzip python; fi
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: appimage-fallback
+          path: dist
+      - name: Install host tools
+        run: bash tests/install-deps.sh --test
+      - name: Run the AppImage headless once
+        run: bash tests/ci-test.sh smoke dist/FileWinch-x86_64.AppImage
+      - name: Acceptance tests
+        run: bash tests/ci-test.sh full dist/FileWinch-x86_64.AppImage
+
+  release:
+    needs: [deps-check, test, decide-untrunc, test-fallback]
+    if: >-
+      always() && startsWith(github.ref, 'refs/tags/v') && needs.deps-check.result == 'success' &&
+      ((needs.decide-untrunc.outputs.fallback != 'true' && needs.test.result == 'success') ||
+       (needs.decide-untrunc.outputs.fallback == 'true' && needs.test-fallback.result == 'success'))
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.decide-untrunc.outputs.fallback == 'true' && 'appimage-fallback' || 'appimage-default' }}
+          path: dist
+      - name: Check the checksum
+        run: cd dist && sha256sum -c SHA256SUMS
+      - uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: dist/FileWinch-x86_64.AppImage
+      - name: Release notes
+        run: |
+          {
+            printf 'FileWinch %s\n\n' "${GITHUB_REF_NAME}"
+            printf 'Download FileWinch-x86_64.AppImage, mark it executable, run it. Every recovery and repair tool comes from your distro; the Dependencies tab shows the install command for anything missing.\n\n'
+            printf 'Signed SLSA build provenance is on the repo'"'"'s Attestations page. Verify with: gh attestation verify FileWinch-x86_64.AppImage --repo %s\n\n' "${GITHUB_REPOSITORY}"
+            printf '## Bundled untrunc\n\n'
+            if [ "${{ needs.decide-untrunc.outputs.fallback }}" = "true" ]; then
+              printf 'This release uses the FF_VER fallback build: the truncated-MP4 test failed on every distro with current libav.\n\n'
+            else
+              printf 'Default build against current libav.\n\n'
+            fi
+            sed 's/^/    /' dist/untrunc-build.txt
+            printf '\nuntrunc is GPL-licensed. Source: https://github.com/anthwlock/untrunc at the commit above.\n'
+          } >notes.md
+          cat notes.md
+      - name: Publish
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          ver=$(curl -fsSL -H "Authorization: Bearer $GH_TOKEN" \
-            https://api.github.com/repos/niess/python-appimage/releases?per_page=100 | python -c '
-          import json, re, sys
-          tags = [r["tag_name"] for r in json.load(sys.stdin)]
-          vers = [tuple(map(int, m.groups())) for t in tags if (m := re.fullmatch(r"python(\d+)\.(\d+)", t))]
-          print("%d.%d" % max(vers))')
-          echo "Using Python $ver"
-          echo "version=$ver" >> "$GITHUB_OUTPUT"
-
-      - name: Stage the recipe
-        run: |
-          mkdir -p build
-          cp -r packaging/appimage build/keelhaul-recipe
-          cp -r keelhaul build/keelhaul
-          find build/keelhaul -name __pycache__ -prune -exec rm -rf {} +
-          # Web UI uploads drop the executable bit, so set it here instead of
-          # trusting the repo's file modes.
-          chmod +x build/keelhaul-recipe/entrypoint.sh
-
-      # python-appimage assembles the AppDir in a private 0700 temp dir, and
-      # current appimagetool refuses to package anything other users cannot
-      # read. So stop python-appimage before packaging, fix the modes, and
-      # package with appimagetool ourselves.
-      - name: Build the AppDir
-        working-directory: build
-        run: |
-          python-appimage build app --no-packaging -p "${{ steps.py.outputs.version }}" keelhaul-recipe -x keelhaul
-          test -d Keelhaul-x86_64 || { echo "AppDir Keelhaul-x86_64 was not created" >&2; exit 1; }
-
-      - name: Fix AppDir permissions
-        working-directory: build
-        run: |
-          chmod -R a+rX Keelhaul-x86_64
-          chmod a+rx Keelhaul-x86_64/AppRun
-          chmod a+rx Keelhaul-x86_64/usr/bin/*
-
-      - name: Package with appimagetool
-        working-directory: build
-        env:
-          ARCH: x86_64
-          APPIMAGE_EXTRACT_AND_RUN: "1"
-        run: |
-          curl -fsSL -o appimagetool \
-            https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage
-          chmod +x appimagetool
-          ./appimagetool --no-appstream Keelhaul-x86_64 Keelhaul-x86_64.AppImage
-
-      - name: Smoke test the AppImage
-        working-directory: build
-        env:
-          QT_QPA_PLATFORM: offscreen
-        run: |
-          chmod +x Keelhaul-x86_64.AppImage
-          ./Keelhaul-x86_64.AppImage --appimage-extract >/dev/null
-          test -x squashfs-root/AppRun || { echo "AppRun is not executable" >&2; exit 1; }
-          chmod +x squashfs-root/usr/bin/python*
-          PYTHONPATH=squashfs-root timeout 120 ./squashfs-root/usr/bin/python${{ steps.py.outputs.version }} -c \
-            'import keelhaul.ui.mainwindow, keelhaul.core.escalation; print("imports ok")'
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: Keelhaul-x86_64.AppImage
-          path: build/Keelhaul-x86_64.AppImage
-
-      - name: Attach to release
-        if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v2
-        with:
-          files: build/Keelhaul-x86_64.AppImage
-          generate_release_notes: true
+          gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --title "FileWinch $GITHUB_REF_NAME" \
+            --notes-file notes.md dist/FileWinch-x86_64.AppImage dist/SHA256SUMS dist/untrunc-build.txt
