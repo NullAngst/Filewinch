@@ -206,8 +206,8 @@ feature = "MP4 index rebuild"
 binaries = ["MP4Box"]
 version_cmd = ["MP4Box", "-version"]
 # Ubuntu 26.04 and Debian no longer ship gpac. GPAC publishes its own .deb.
-packages = { apt = "", dnf = "gpac", zypper = "gpac", pacman = "gpac" }
-upstream_note = "Not in the Debian or Ubuntu archive. Download the .deb from gpac.io/downloads."
+packages = { apt = "", dnf = "gpac", zypper = "", pacman = "gpac" }
+upstream_note = "Not in the Debian, Ubuntu or openSUSE main repositories. On openSUSE install gpac from Packman; on Debian or Ubuntu download the .deb from gpac.io/downloads."
 
 [tools.tsanalyze]
 required = false
@@ -223,7 +223,8 @@ required = false
 feature = "MP3 frame repair"
 binaries = ["mp3val"]
 version_cmd = ["mp3val"]
-packages = { apt = "mp3val", dnf = "mp3val", zypper = "mp3val", pacman = "mp3val" }
+packages = { apt = "mp3val", dnf = "", zypper = "", pacman = "" }
+upstream_note = "Packaged on Debian and Ubuntu only. On Arch install mp3val from the AUR; elsewhere build it from mp3val.sourceforge.net. ffmpeg remux covers MP3 without it."
 
 [tools.flac]
 required = false
@@ -237,7 +238,8 @@ required = false
 feature = "JPEG check"
 binaries = ["jpeginfo"]
 version_cmd = ["jpeginfo", "--version"]
-packages = { apt = "jpeginfo", dnf = "jpeginfo", zypper = "jpeginfo", pacman = "jpeginfo" }
+packages = { apt = "jpeginfo", dnf = "jpeginfo", zypper = "jpeginfo", pacman = "" }
+upstream_note = "On Arch install jpeginfo from the AUR."
 
 [tools.jpegtran]
 required = false
@@ -258,7 +260,8 @@ required = false
 feature = "PNG check"
 binaries = ["pngcheck"]
 version_cmd = ["pngcheck", "-h"]
-packages = { apt = "pngcheck", dnf = "pngcheck", zypper = "pngcheck", pacman = "pngcheck" }
+packages = { apt = "pngcheck", dnf = "pngcheck", zypper = "pngcheck", pacman = "" }
+upstream_note = "On Arch install pngcheck from the AUR."
 
 [tools.pngfix]
 required = false

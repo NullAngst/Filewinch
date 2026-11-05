@@ -50,11 +50,29 @@ if [ "$(id -u)" -ne 0 ]; then
     as_root=(sudo)
 fi
 
+# zypper exit codes 100 to 103 and 106 are notices (updates waiting, reboot
+# suggested, a repository skipped), not failures.
+zypper_ok() {
+    code=$?
+    case $code in
+        0|100|101|102|103|106) return 0 ;;
+        *) return "$code" ;;
+    esac
+}
+
+# FILEWINCH_CI=1 lets zypper remove conflicting packages to resolve an install,
+# such as the busybox replacements in the openSUSE container. Never set it on
+# your own machine.
+zypper_extra=()
+if [ "${FILEWINCH_CI:-0}" = "1" ]; then
+    zypper_extra=(--force-resolution)
+fi
+
 pm_install() {
     case $pm in
         apt-get) DEBIAN_FRONTEND=noninteractive "${as_root[@]}" apt-get install -y --no-install-recommends "$@" ;;
         dnf) "${as_root[@]}" dnf install -y "$@" ;;
-        zypper) "${as_root[@]}" zypper --non-interactive install --no-recommends "$@" ;;
+        zypper) "${as_root[@]}" zypper --non-interactive install --no-recommends "${zypper_extra[@]}" "$@" || zypper_ok ;;
         pacman) "${as_root[@]}" pacman -S --needed --noconfirm "$@" ;;
     esac
 }
@@ -63,7 +81,7 @@ pm_refresh() {
     case $pm in
         apt-get) "${as_root[@]}" apt-get update ;;
         dnf) : ;;
-        zypper) "${as_root[@]}" zypper --non-interactive refresh ;;
+        zypper) "${as_root[@]}" zypper --non-interactive refresh || zypper_ok ;;
         pacman) "${as_root[@]}" pacman -Sy --noconfirm ;;
     esac
 }
@@ -99,13 +117,14 @@ PY
 if [ "$extras" -eq 1 ]; then
     # Fixture builders, test runner, and the libraries PyQt6's Qt needs to start.
     case $key in
-        apt) packages+=(mtools dosfstools e2fsprogs python3-pytest ca-certificates
+        apt) packages+=(mtools dosfstools e2fsprogs shellcheck python3-pytest ca-certificates
                         libgl1 libegl1 libfontconfig1 libxkbcommon0 libdbus-1-3 libglib2.0-0) ;;
-        dnf) packages+=(mtools dosfstools e2fsprogs gawk python3-pytest
+        dnf) packages+=(mtools dosfstools e2fsprogs gawk ShellCheck python3-pytest
                         mesa-libGL mesa-libEGL fontconfig libxkbcommon dbus-libs glib2) ;;
-        zypper) packages+=(mtools dosfstools e2fsprogs gawk python3-pytest
+        # The openSUSE image's busybox awk is enough for make-fixtures.sh.
+        zypper) packages+=(mtools dosfstools e2fsprogs ShellCheck python3-pytest
                            Mesa-libGL1 Mesa-libEGL1 fontconfig libxkbcommon0 libdbus-1-3 glib2-tools) ;;
-        pacman) packages+=(mtools dosfstools e2fsprogs gawk python-pytest
+        pacman) packages+=(mtools dosfstools e2fsprogs gawk shellcheck python-pytest
                            mesa fontconfig libxkbcommon dbus glib2) ;;
     esac
 fi
@@ -116,13 +135,23 @@ if [ "$mode" = print ]; then
 fi
 
 printf 'Installing with %s: %s\n' "$pm" "${packages[*]}"
-# One at a time on failure, so the log names the package that is gone.
+# One at a time on failure, so the log names the package that is gone and
+# the package manager's own reason for each.
 if ! pm_install "${packages[@]}"; then
     failed=()
+    reasons=()
+    log=$(mktemp "${TMPDIR:-/tmp}/install-deps.XXXXXX")
+    trap 'rm -f -- "$log"' EXIT
     for p in "${packages[@]}"; do
-        pm_install "$p" || failed+=("$p")
+        if ! pm_install "$p" >"$log" 2>&1; then
+            failed+=("$p")
+            reasons+=("$p: $(grep -v '^[[:space:]]*$' "$log" | tail -n 3 | tr '\n' ' ')")
+        fi
+        cat -- "$log"
     done
     if [ "${#failed[@]}" -gt 0 ]; then
+        printf '\nWhy each one failed:\n' >&2
+        printf '  %s\n' "${reasons[@]}" >&2
         printf 'These packages could not be installed with %s: %s\n' "$pm" "${failed[*]}" >&2
         printf 'Fix their names in src/filewinch/deps.toml.\n' >&2
         exit 1

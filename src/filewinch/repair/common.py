@@ -113,6 +113,19 @@ PTS_RE = re.compile(r"pts_time:\s*(-?[\d.]+)")
 TIME_RE = re.compile(r"^out_time_us=(\d+)")
 
 
+def log_source(line: str) -> str:
+    """Which component logged a line: "[h264 @ 0x...]" gives "h264".
+
+    FFmpeg 7.1 and later prefix demuxers and muxers with their stream, as in
+    "[in#0/matroska,webm @ 0x...]" and "[out#0/null @ 0x...]"; the prefix is
+    dropped so both forms read the same.
+    """
+    if not line.startswith("[") or " @" not in line:
+        return ""
+    tag = line[1:line.find(" @")]
+    return tag.split("/", 1)[1] if re.match(r"^(?:in|out)#\d+/", tag) else tag
+
+
 def _has_video(info: dict) -> bool:
     return any(s.get("codec_type") == "video" for s in info.get("streams", []))
 
@@ -174,7 +187,7 @@ def decode_check(ctx: Ctx, path: Path, extra_input: list[str] | None = None) -> 
                 continue
             if level not in ("error", "fatal", "panic"):
                 continue
-            source = line[1:line.find(" @")] if line.startswith("[") and " @" in line else ""
+            source = log_source(line)
             # The null muxer complaining about output timestamps is not damage
             # in the file being checked.
             if source == "null":
@@ -191,7 +204,7 @@ def decode_check(ctx: Ctx, path: Path, extra_input: list[str] | None = None) -> 
                 continue
             if re.match(r"^[a-z0-9_]+=", line):
                 continue  # other progress keys
-            if line.strip() and not line.startswith("[null @"):
+            if line.strip() and log_source(line) != "null":
                 errors += 1
                 times.append(now)
     if video:

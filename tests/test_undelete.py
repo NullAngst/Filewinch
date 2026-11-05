@@ -86,21 +86,27 @@ def test_carve_resume_matches_uninterrupted(fixtures, tmp_path):
     reference = carved_hashes(whole)
     assert reference
 
-    out = tmp_path / "interrupted"
-    token = CancelToken()
-    worker = threading.Thread(target=undelete.carve, args=(str(img), out), kwargs={"cancel": token})
-    worker.start()
-    prefix = out / "recup_dir"
-    deadline = time.time() + 120
-    while time.time() < deadline and worker.is_alive():
-        if photorec.carved_files(prefix):
+    # Stop the carve as soon as it has written its first file. On a fast
+    # machine PhotoRec may already have found every file by then; that still
+    # counts as interrupted as long as it left its session file behind.
+    # A carve that finished outright tested nothing, so try again.
+    for attempt in range(3):
+        out = tmp_path / f"interrupted-{attempt}"
+        token = CancelToken()
+        worker = threading.Thread(target=undelete.carve, args=(str(img), out), kwargs={"cancel": token})
+        worker.start()
+        prefix = out / "recup_dir"
+        deadline = time.time() + 120
+        while time.time() < deadline and worker.is_alive():
+            if photorec.carved_files(prefix):
+                break
+            time.sleep(0.005)
+        token.cancel()
+        worker.join()
+        if photorec.has_session(out / ".photorec-session"):
             break
-        time.sleep(0.05)
-    token.cancel()
-    worker.join()
-    first = carved_hashes(photorec.carved_files(prefix))
-    assert first != reference or not photorec.has_session(out / ".photorec-session"), \
-        "the carve finished before it could be interrupted"
+    else:
+        raise AssertionError("every carve finished before it could be interrupted")
     resumed = undelete.carve(str(img), out)
     assert carved_hashes(resumed) == reference
     assert not photorec.has_session(out / ".photorec-session")

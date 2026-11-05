@@ -1,5 +1,31 @@
 # Changes
 
+## 2026.11.05 - Bug fixes and package names
+
+- Decode check: newer ffmpeg (7.1 and later) tags log lines as
+"[in#0/matroska,webm @" and "[out#0/null @". The check now reads both forms,
+so demuxer read-ahead errors no longer place damage too early and null-muxer
+timestamp warnings no longer count as decode errors.
+- Resume test: a carve counts as interrupted when PhotoRec leaves its session
+file, even if every file was already found. It retries when a carve
+finishes before the stop lands.
+- deps.toml: mp3val is apt only (AUR on Arch); jpeginfo and pngcheck are
+AUR only on Arch; gpac has no openSUSE main-repo package (Packman). Each
+missing one shows where to get it.
+- install-deps.sh: prints the package manager's reason for each package that
+fails, treats zypper notice codes (100 to 103, 106) as success, and with
+FILEWINCH_CI=1 lets zypper resolve conflicts. CI sets it.
+- install-deps.sh --test also installs shellcheck, so the shellcheck test
+runs in CI. openSUSE no longer installs gawk; its busybox awk is enough.
+- Workflow: the openSUSE checkout step accepts zypper exit code 106 (a
+repository was skipped).
+
+
+Reasons for changes: The second CI run failed the MKV and resume tests on
+the newer ffmpeg and faster runners, failed deps-check on Fedora, openSUSE
+and Arch on package names, and stopped one openSUSE job on zypper's exit
+code 106. All 57 tests pass here on both ffmpeg 6.1 and current ffmpeg.
+
 ## 2026.11.05 - Build fixes
 
 - build-appimage.sh makes the whole AppDir readable (chmod -R a+rX) before
