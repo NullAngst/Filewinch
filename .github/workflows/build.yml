@@ -34,7 +34,7 @@ jobs:
         run: |
           apt-get update
           DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-            ca-certificates curl git make g++ pkg-config file python3 \
+            ca-certificates curl git make g++ pkg-config file python3 librsvg2-bin \
             libavformat-dev libavcodec-dev libavutil-dev
       - uses: actions/checkout@v4
       - name: Build the AppImage
@@ -142,7 +142,7 @@ jobs:
         run: |
           apt-get update
           DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-            ca-certificates curl wget git make g++ pkg-config file python3 nasm yasm \
+            ca-certificates curl wget git make g++ pkg-config file python3 librsvg2-bin nasm yasm \
             libavformat-dev libavcodec-dev libavutil-dev
       - uses: actions/checkout@v4
       - name: Build the AppImage with untrunc's static ffmpeg
