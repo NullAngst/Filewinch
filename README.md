@@ -160,17 +160,19 @@ Want a sixth theme? Drop a .qss file into `src/filewinch/themes/` with a palette
 
 1. Install Python 3.11 or newer and PyQt6: `pip install PyQt6`, or `sudo apt install python3-pyqt6`, or whichever your distro calls it.
 2. From the repo folder: `PYTHONPATH=src python3 -m filewinch`
-2.5. For the MP4 untrunc recipe: `packaging/build-untrunc.sh` builds it into `build/bin/untrunc`, where a source run looks for it. It needs git, make, g++, pkg-config and the libavformat, libavcodec and libavutil development packages.
+2.5. For the MP4 untrunc recipe: `bash packaging/build-untrunc.sh` builds it into `build/bin/untrunc`, where a source run looks for it. It needs git, make, g++, pkg-config and the libavformat, libavcodec and libavutil development packages.
 
 ## Tests
 
-1. `tests/install-deps.sh --test` installs every tool in deps.toml plus what the tests need, with whichever package manager you have.
+1. `bash tests/install-deps.sh --test` installs every tool in deps.toml plus what the tests need, with whichever package manager you have.
 2. `python3 -m pytest tests`
 
-The tests build their own damaged files and deleted-file images with `tests/make-fixtures.sh` (no root, no mounting) and run the real tools against them.
+Scripts are run with `bash script.sh` here and in CI, so they work whether or not the executable bit survived the trip to GitHub.
+
+The tests build their own damaged files and deleted-file images with `bash tests/make-fixtures.sh` (no root, no mounting) and run the real tools against them.
 
 ## Building the AppImage
 
-`packaging/build-appimage.sh` does everything the CI build job does: builds untrunc, grabs a relocatable Python from python-appimage, installs PyQt6 and FileWinch into it, bundles untrunc's libraries with linuxdeploy and packs it with appimagetool. GitHub Actions runs it on every `v*` tag, tests the result on Debian, Ubuntu, Fedora, openSUSE Tumbleweed and Arch against their current packages, attaches signed SLSA build provenance, and publishes the release. The provenance shows up on the repo's Attestations page.
+`bash packaging/build-appimage.sh` does everything the CI build job does: builds untrunc, grabs a relocatable Python from python-appimage, installs PyQt6 and FileWinch into it, bundles untrunc's libraries with linuxdeploy and packs it with appimagetool. GitHub Actions runs it on every `v*` tag, tests the result on Debian, Ubuntu, Fedora, openSUSE Tumbleweed and Arch against their current packages, attaches signed SLSA build provenance, and publishes the release. The provenance shows up on the repo's Attestations page.
 
 Now FileWinch is installed, the Dependencies tab is green, and it's ready for the day something goes missing.

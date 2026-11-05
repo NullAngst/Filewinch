@@ -57,7 +57,7 @@ version=$(sed -n 's/^__version__ = "\(.*\)"/\1/p' "$repo/src/filewinch/__init__.
 printf 'Building FileWinch %s\n' "$version"
 
 # 1. untrunc
-"$script_dir/build-untrunc.sh" "$work/untrunc"
+bash "$script_dir/build-untrunc.sh" "$work/untrunc"
 
 # 2. A relocatable Python from python-appimage, newest release unless told otherwise.
 if [ -z "${PYTHON_APPIMAGE_URL:-}" ]; then

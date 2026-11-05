@@ -30,7 +30,7 @@ def fixtures(tmp_path_factory) -> Path:
     if prebuilt and (Path(prebuilt) / "repair").is_dir():
         return Path(prebuilt)
     out = tmp_path_factory.mktemp("fixtures")
-    subprocess.run([str(ROOT / "tests" / "make-fixtures.sh"), str(out)], check=True)
+    subprocess.run(["bash", str(ROOT / "tests" / "make-fixtures.sh"), str(out)], check=True)
     return out
 
 

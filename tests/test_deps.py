@@ -139,3 +139,27 @@ def test_install_deps_script_is_shellcheck_clean():
     for script in list((ROOT / "tests").glob("*.sh")) + list((ROOT / "packaging").glob("*.sh")):
         res = subprocess.run(["shellcheck", str(script)], capture_output=True, text=True)
         assert res.returncode == 0, res.stdout
+
+
+
+def test_scripts_never_rely_on_the_executable_bit():
+    """Web UI uploads drop the executable bit, so every script is started through bash."""
+    import re
+    names = r"(?:build-appimage|build-untrunc|install-deps|ci-test|make-fixtures)\.sh"
+    workflow = (ROOT / ".github" / "workflows" / "build.yml").read_text()
+    for line in workflow.splitlines():
+        m = re.search(r"run:\s*(\S+)", line)
+        if m and re.search(names, m.group(1)):
+            raise AssertionError(f"workflow runs a script without bash: {line.strip()}")
+    for f in [*(ROOT / "packaging").glob("*.sh"), *(ROOT / "tests").glob("*.sh")]:
+        for n, line in enumerate(f.read_text().splitlines(), 1):
+            code = line.strip()
+            if code.startswith("#") or not re.search(names, code):
+                continue
+            # A command line whose first word is the script itself.
+            if re.match(r'^"?(\$\w+/|\./)?[\w/"$-]*' + names, code):
+                raise AssertionError(f"{f.name}:{n} runs a script without bash: {code}")
+    conftest = (ROOT / "tests" / "conftest.py").read_text()
+    for line in conftest.splitlines():
+        if "subprocess.run" in line and re.search(names, line):
+            assert '"bash"' in line, f"conftest runs a script without bash: {line.strip()}"

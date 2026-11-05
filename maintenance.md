@@ -52,7 +52,7 @@ file server's disks. Get it wrong and you're the one needing FileWinch.
 
 10. Optical test if you have a disc: image it, and for a DVD you recorded,
 send its VOBs through Repair.
-11. Repair test: run tests/make-fixtures.sh and push the outputs through the
+11. Repair test: run bash tests/make-fixtures.sh OUTPUT_DIR and push the outputs through the
 Repair page by hand. Watch the truncated MP4 case, that's the untrunc build.
 12. Start the AppImage on the second distro. It should open, list drives, and
 the Dependencies tab should show the right install command for that distro.

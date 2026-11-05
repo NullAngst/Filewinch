@@ -69,7 +69,7 @@ case $mode in
         fi
         "$python_bin" -s -m pip install --quiet --no-warn-script-location pytest
         export APPDIR="$appdir"
-        "$repo/tests/make-fixtures.sh" "$work/fixtures"
+        bash "$repo/tests/make-fixtures.sh" "$work/fixtures"
         export FILEWINCH_FIXTURES="$work/fixtures"
         # Tests import the app installed in the AppImage, not the checkout.
         set +e
