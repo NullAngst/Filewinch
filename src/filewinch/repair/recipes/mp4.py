@@ -114,9 +114,12 @@ def verify(ctx: Ctx, out: Path):
     # untrunc can "succeed" with a few frames. Without the original's index there
     # is no true length, so the mdat size against the output size is the check:
     # an output that kept under half the media data has not recovered the file.
-    if v.ok and not has_moov(ctx):
+    # It counts as lost, so the engine never keeps a clean few frames over a
+    # full-length output that has some decode errors.
+    if not has_moov(ctx) and out.exists():
         mdat = sum(a[2] for a in atoms(ctx) if a[0] == "mdat")
         if mdat and out.stat().st_size < mdat * 0.5:
             v.ok = False
+            v.lost = True
             v.detail += f", only {out.stat().st_size * 100 // max(mdat, 1)}% of the media data recovered"
     return v

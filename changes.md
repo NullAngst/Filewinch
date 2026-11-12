@@ -1,5 +1,25 @@
 # Changes
 
+## 2026.11.11 - Bug fixes
+
+- MP4 repair: an untrunc output that kept under half of the original's media
+data now counts as lost. Before, a clean 1-frame output beat a full-length
+output with decode errors when nothing fully verified, so a cut-off video
+came back as a single frame.
+- The under-half check now runs on every output from a moov-less MP4, not
+only ones that already decoded clean.
+- test_mp4_without_moov_untrunc skips when the fixture's video isn't H.264
+or HEVC. Stock Fedora and openSUSE ffmpeg can't make H.264, the fixture
+falls back to MPEG-4 Part 2, and untrunc stops after a few frames of it
+(checked by hand: VP9, AV1 and MJPEG fail the same way).
+- New test, test_mp4_partial_untrunc_output_ranks_as_lost, runs on every
+distro and fails on the old ranking.
+
+Reasons for changes: the build failed on Fedora and openSUSE. The test was
+right to fail, since the engine kept a 1-frame file, but the fixture on those
+distros was also a codec untrunc doesn't support, so even a correct engine
+couldn't pass it there.
+
 ## 2026.11.05 - Bug fixes
 
 - Decode check runs video and audio as separate passes, each timing its own

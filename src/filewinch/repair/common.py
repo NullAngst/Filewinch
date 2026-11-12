@@ -51,7 +51,7 @@ class Verify:
     errors: int = 0
     duration: float = 0.0
     detail: str = ""
-    lost: bool = False   # the output is missing a stream the original had
+    lost: bool = False   # the output is missing a stream the original had, or most of its data
 
 
 @dataclass

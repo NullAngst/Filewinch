@@ -21,7 +21,11 @@ exiftool. If a fix landed in a new version, add or raise that tool's minimum
 in src/filewinch/deps.toml so the Dependencies tab flags older installs.
 2. Check untrunc upstream at github.com/anthwlock/untrunc. Still maintained?
 Still the best fork? Then check the last release's notes for which untrunc
-build shipped, default or the FF_VER fallback.
+build shipped, default or the FF_VER fallback. The truncated-MP4 test skips
+on Fedora and openSUSE, since their stock ffmpeg has no H.264 and untrunc
+can't walk the MPEG-4 Part 2 fallback fixture. If upstream ever adds proper
+mp4v support, or those distros start shipping H.264, the skip message in
+the test log changes to a pass and the skip in tests/test_recipes.py can go.
 3. Go to Actions and make sure the scheduled workflow is still enabled, since
 GitHub switches off schedules after 60 days with no repo activity. Re-enable
 it if it's off.

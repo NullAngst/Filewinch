@@ -40,6 +40,12 @@ def duration(ctx: Ctx, path: Path) -> float:
     return duration_of(ffprobe_json(ctx, path))
 
 
+def video_codec(path: Path) -> str:
+    probe = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries",
+                            "stream=codec_name", "-of", "csv=p=0", str(path)], capture_output=True, text=True)
+    return probe.stdout.strip()
+
+
 def test_mp4_without_moov_untrunc(fixtures, tools, tmp_path):
     need("ffmpeg")
     if not tools.available("untrunc"):
@@ -47,12 +53,39 @@ def test_mp4_without_moov_untrunc(fixtures, tools, tmp_path):
     src = fixtures / "repair" / "no_moov.mp4"
     ref = fixtures / "repair" / "reference.mp4"
     need_decoders_for(ref)
+    # untrunc walks H.264 and HEVC frame by frame. MPEG-4 Part 2, which
+    # make-fixtures.sh falls back to where ffmpeg has no libx264 (stock Fedora
+    # and openSUSE), stops it after a few frames, so there is nothing to test.
+    video = video_codec(ref)
+    if video not in ("h264", "hevc"):
+        pytest.skip(f"fixture video is {video or 'missing'}: untrunc only rebuilds H.264 and HEVC reliably")
     outcome = engine.repair(src, tmp_path, tools, reference=ref)
     assert outcome.output, outcome.message
     assert "untrunc" in outcome.winner
     ctx = ctx_for(src, tools, tmp_path)
     original = duration(ctx, ref)  # the cut-off file was recorded the same length
     assert duration(ctx, outcome.output) >= 0.9 * original
+
+
+def test_mp4_partial_untrunc_output_ranks_as_lost(fixtures, tools, tmp_path):
+    """A few clean frames out of a moov-less MP4 must lose to a full-length
+    output with errors. Runs on every distro: no untrunc, no H.264 needed."""
+    need("ffmpeg", "ffprobe")
+    src = fixtures / "repair" / "no_moov.mp4"
+    ref = fixtures / "repair" / "reference.mp4"
+    need_decoders_for(ref)
+    short = tmp_path / "short.mp4"
+    subprocess.run(["ffmpeg", "-nostdin", "-v", "error", "-y", "-i", str(ref), "-t", "0.2", "-c", "copy",
+                    str(short)], check=True)
+    ctx = ctx_for(src, tools, tmp_path)
+    module = recipe_pkg.for_ext("mp4")
+    v_short = module.verify(ctx, short)
+    assert v_short.lost and not v_short.ok, v_short.detail
+    v_full = module.verify(ctx, ref)
+    assert not v_full.lost, v_full.detail
+    full_with_errors = engine.Attempt("full", True, engine.Verify(False, 140, v_full.duration, "", lost=False))
+    clean_but_short = engine.Attempt("short", True, v_short)
+    assert min([clean_but_short, full_with_errors], key=engine._score) is full_with_errors
 
 
 def test_mkv_zeroed_middle(fixtures, tools, tmp_path):
